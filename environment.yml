@@ -1,0 +1,13 @@
+name: drl_peg_in_hole
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - pybullet
+    - gymnasium
+    - stable-baselines3
+    - matplotlib
+    - pandas
+    - tensorboard
