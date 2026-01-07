@@ -17,7 +17,7 @@ LOG_STD_MAX = 2.0
 
 
 class NormalTanhPolicy(nn.Module):
-    hidden_dims: Sequence[int]
+    hidden_dims: Sequence[int] 2 
     action_dim: int
     state_dependent_std: bool = True
     dropout_rate: Optional[float] = None

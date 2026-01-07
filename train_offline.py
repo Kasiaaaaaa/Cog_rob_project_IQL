@@ -12,6 +12,8 @@ import wrappers
 from dataset_utils import D4RLDataset, split_into_trajectories
 from evaluation import evaluate
 from learner import Learner
+from rlenv import PegInHoleGymEnv
+
 
 FLAGS = flags.FLAGS
 
@@ -25,6 +27,11 @@ flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(1e6), 'Number of training steps.')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
+flags.DEFINE_string('shape', 'circle', 'Peg/hole shape.')
+flags.DEFINE_string('reward', 'old', 'Which rewared will be used.')
+flags.DEFINE_string('dataset_path', 'peg_iql_dataset.npz', 'Path to offline dataset.')
+
+
 config_flags.DEFINE_config_file(
     'config',
     'default.py',
@@ -54,7 +61,7 @@ def normalize(dataset):
 
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
-    env = gym.make(env_name)
+    env = PegInHoleGymEnv(shape_type=FLAGS.shape, reward_type=FLAGS.rewared)  # or a flag
 
     env = wrappers.EpisodeMonitor(env)
     env = wrappers.SinglePrecision(env)
@@ -63,15 +70,34 @@ def make_env_and_dataset(env_name: str,
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
 
-    dataset = D4RLDataset(env)
+    # data set loding
+    data = np.load(FLAGS.dataset_path)
 
-    if 'antmaze' in FLAGS.env_name:
-        dataset.rewards -= 1.0
-        # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
-        # but I found no difference between (x - 0.5) * 4 and x - 1.0
-    elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
-          or 'hopper' in FLAGS.env_name):
-        normalize(dataset)
+    observations = data["observations"].astype(np.float32)
+    actions = data["actions"].astype(np.float32)
+    rewards = data["rewards"].astype(np.float32).reshape(-1, 1)
+    next_observations = data["next_observations"].astype(np.float32)
+    terminals = data["terminals"].astype(np.float32).reshape(-1, 1)
+
+    masks = 1.0 - terminals  # 1 for non-terminal transitions
+
+    dataset = D4RLDataset.from_arrays(
+        observations=observations,
+        actions=actions,
+        rewards=rewards,
+        masks=masks,
+        dones_float=terminals,
+        next_observations=next_observations,
+    )
+
+
+    # if 'antmaze' in FLAGS.env_name:
+    #     dataset.rewards -= 1.0
+    #     # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
+    #     # but I found no difference between (x - 0.5) * 4 and x - 1.0
+    # elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
+    #       or 'hopper' in FLAGS.env_name):
+    #     normalize(dataset)
 
     return env, dataset
 
