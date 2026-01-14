@@ -62,3 +62,23 @@ echo "==> Done."
 echo "Next steps:"
 echo "  conda activate ${ENV_NAME}"
 echo "  python train_offline.py --dataset_path FULL_DATASET.npz"
+
+
+
+python -m pip install \
+  numpy==1.23.5 \
+  scipy \
+  flax \
+  optax \
+  ml-collections \
+  absl-py \
+  tqdm \
+  tensorboardX \
+  tensorflow-probability \
+  gym==0.26.2 \
+  pybullet \
+  imageio \
+  imageio-ffmpeg \
+  gdown \
+  cloudpickle \
+  opencv-python
