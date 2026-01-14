@@ -1,7 +1,11 @@
 import collections
 from typing import Optional
 
-import d4rl
+try:
+    import d4rl
+except ImportError:
+    d4rl = None
+
 import gym
 import numpy as np
 from tqdm import tqdm
@@ -59,6 +63,28 @@ class Dataset(object):
         self.next_observations = next_observations
         self.size = size
 
+    @classmethod
+    def from_arrays(cls,
+                    observations,
+                    actions,
+                    rewards,
+                    masks,
+                    dones_float,
+                    next_observations):
+        observations = observations.astype(np.float32) if observations.dtype != np.uint8 else observations
+        next_observations = next_observations.astype(np.float32) if next_observations.dtype != np.uint8 else next_observations
+
+        return cls(
+            observations=observations,
+            actions=actions.astype(np.float32),
+            rewards=rewards.astype(np.float32),
+            masks=masks.astype(np.float32),
+            dones_float=dones_float.astype(np.float32),
+            next_observations=next_observations,
+            size=len(observations),
+        )
+
+
     def sample(self, batch_size: int) -> Batch:
         indx = np.random.randint(self.size, size=batch_size)
         return Batch(observations=self.observations[indx],
@@ -66,6 +92,59 @@ class Dataset(object):
                      rewards=self.rewards[indx],
                      masks=self.masks[indx],
                      next_observations=self.next_observations[indx])
+    
+    
+class NPZDataset(Dataset):
+    def __init__(self, npz_path: str, clip_actions: bool = False, eps: float = 1e-5):
+        data = np.load(npz_path, allow_pickle=True)
+
+        observations = data["observations"]
+        next_observations = data["next_observations"]
+        actions = data["actions"]
+        rewards = data["rewards"]
+        terminals = data["terminals"]
+
+        # If observations accidentally saved as object (common), force numeric array.
+        # This will fail loudly if it's truly not numeric (which is good).
+        observations = np.asarray(observations)
+        next_observations = np.asarray(next_observations)
+
+        # Optional: if you stored dict observations, you MUST select the key here
+        # e.g. observations = observations["cam_image"]  (but only if it's actually a dict)
+        if isinstance(observations, dict):
+            observations = observations["cam_image"]
+        if isinstance(next_observations, dict):
+            next_observations = next_observations["cam_image"]
+
+        # Convert dtypes
+        actions = actions.astype(np.float32)
+        rewards = rewards.astype(np.float32).reshape(-1)
+        terminals = terminals.astype(np.float32).reshape(-1)
+
+        # masks = 1 - terminal
+        masks = (1.0 - terminals).astype(np.float32)
+
+        # dones_float: use terminals directly (simplest & correct for offline)
+        dones_float = terminals.astype(np.float32)
+
+        # If your obs are images uint8, keep them uint8 here; convert to float in the learner/model.
+        # If you want them float32 now, uncomment:
+        # observations = observations.astype(np.float32) / 255.0
+        # next_observations = next_observations.astype(np.float32) / 255.0
+
+        if clip_actions:
+            lim = 1 - eps
+            actions = np.clip(actions, -lim, lim)
+
+        super().__init__(
+            observations=observations,
+            actions=actions,
+            rewards=rewards,
+            masks=masks,
+            dones_float=dones_float,
+            next_observations=next_observations,
+            size=len(observations),
+        )
 
 
 class D4RLDataset(Dataset):
@@ -73,6 +152,8 @@ class D4RLDataset(Dataset):
                  env: gym.Env,
                  clip_to_eps: bool = True,
                  eps: float = 1e-5):
+        if d4rl is None:
+            raise ImportError("d4rl is not installed. Use from_arrays(...) with your NPZ dataset instead.")
         dataset = d4rl.qlearning_dataset(env)
 
         if clip_to_eps:

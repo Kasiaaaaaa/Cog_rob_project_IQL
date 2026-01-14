@@ -1,6 +1,6 @@
 import functools
 from typing import Optional, Sequence, Tuple
-
+import value_net
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -17,8 +17,9 @@ LOG_STD_MAX = 2.0
 
 
 class NormalTanhPolicy(nn.Module):
-    hidden_dims: Sequence[int] 2 
+    hidden_dims: Sequence[int]
     action_dim: int
+    features_dim: int = 256
     state_dependent_std: bool = True
     dropout_rate: Optional[float] = None
     log_std_scale: float = 1.0
@@ -31,9 +32,11 @@ class NormalTanhPolicy(nn.Module):
                  observations: jnp.ndarray,
                  temperature: float = 1.0,
                  training: bool = False) -> tfd.Distribution:
+        features = value_net.CNNEncoder(self.features_dim)(observations)
+
         outputs = MLP(self.hidden_dims,
                       activate_final=True,
-                      dropout_rate=self.dropout_rate)(observations,
+                      dropout_rate=self.dropout_rate)(features,
                                                       training=training)
 
         means = nn.Dense(self.action_dim, kernel_init=default_init())(outputs)
@@ -63,7 +66,7 @@ class NormalTanhPolicy(nn.Module):
             return base_dist
 
 
-@functools.partial(jax.jit, static_argnames=('actor_def', 'distribution'))
+@functools.partial(jax.jit, static_argnames=('actor_def'))
 def _sample_actions(rng: PRNGKey,
                     actor_def: nn.Module,
                     actor_params: Params,

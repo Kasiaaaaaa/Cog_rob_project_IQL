@@ -7,6 +7,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
+from flax.core import unfreeze
 
 Batch = collections.namedtuple(
     'Batch',
@@ -59,7 +60,11 @@ class Model:
                tx: Optional[optax.GradientTransformation] = None) -> 'Model':
         variables = model_def.init(*inputs)
 
-        _, params = variables.pop('params')
+        # Make it mutable (FrozenDict -> dict)
+        variables = unfreeze(variables)
+
+        # params is the VALUE, not (key, value)
+        params = variables.pop('params')
 
         if tx is not None:
             opt_state = tx.init(params)

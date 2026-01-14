@@ -13,13 +13,30 @@ from actor import update as awr_update_actor
 from common import Batch, InfoDict, Model, PRNGKey
 from critic import update_q, update_v
 
+from flax import linen as nn
+
 
 def target_update(critic: Model, target_critic: Model, tau: float) -> Model:
-    new_target_params = jax.tree_multimap(
-        lambda p, tp: p * tau + tp * (1 - tau), critic.params,
-        target_critic.params)
+    
+    new_target_params = jax.tree_util.tree_map(
+        lambda p, tp: p * tau + tp * (1.0 - tau),
+        critic.params,
+        target_critic.params
+    )
 
     return target_critic.replace(params=new_target_params)
+
+def preprocess_obs(obs):
+    """obs: np/jnp array or dict with 'cam_image'."""
+    if isinstance(obs, dict):
+        obs = obs["cam_image"]
+    obs = jnp.asarray(obs)
+    # uint8 -> float32 and normalize
+    if obs.dtype != jnp.float32:
+        obs = obs.astype(jnp.float32)
+    # normalize only if looks like pixels
+    obs = jnp.where(obs > 1.5, obs / 255.0, obs)
+    return obs
 
 
 @jax.jit

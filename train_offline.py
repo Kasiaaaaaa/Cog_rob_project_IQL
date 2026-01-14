@@ -1,5 +1,5 @@
 import os
-from typing import Tuple
+from typing import Tuple, Any
 
 import gym
 import numpy as np
@@ -9,7 +9,7 @@ from ml_collections import config_flags
 from tensorboardX import SummaryWriter
 
 import wrappers
-from dataset_utils import D4RLDataset, split_into_trajectories
+from dataset_utils import Dataset, split_into_trajectories
 from evaluation import evaluate
 from learner import Learner
 from rlenv import PegInHoleGymEnv
@@ -34,7 +34,7 @@ flags.DEFINE_string('dataset_path', 'peg_iql_dataset.npz', 'Path to offline data
 
 config_flags.DEFINE_config_file(
     'config',
-    'default.py',
+    'configs/mujoco_config.py',
     'File path to the training hyperparameter configuration.',
     lock_config=False)
 
@@ -60,34 +60,45 @@ def normalize(dataset):
 
 
 def make_env_and_dataset(env_name: str,
-                         seed: int) -> Tuple[gym.Env, D4RLDataset]:
-    env = PegInHoleGymEnv(shape_type=FLAGS.shape, reward_type=FLAGS.rewared)  # or a flag
+                         seed: int) -> Tuple[gym.Env, Any]:
+    env = PegInHoleGymEnv(shape_type=FLAGS.shape, reward_typ=FLAGS.reward) # gui=False
 
     env = wrappers.EpisodeMonitor(env)
-    env = wrappers.SinglePrecision(env)
+    #env = wrappers.SinglePrecision(env)
 
-    env.seed(seed)
-    env.action_space.seed(seed)
-    env.observation_space.seed(seed)
+    # Modern seeding (Gymnasium / newer Gym)
+    try:
+        env.reset(seed=seed)
+    except TypeError:
+        # Older Gym reset() signature
+        env.reset()
+
+    # Also seed the action/observation spaces if available
+    if hasattr(env.action_space, "seed"):
+        env.action_space.seed(seed)
+    if hasattr(env.observation_space, "seed"):
+        env.observation_space.seed(seed)
+
 
     # data set loding
     data = np.load(FLAGS.dataset_path)
 
     observations = data["observations"].astype(np.float32)
     actions = data["actions"].astype(np.float32)
-    rewards = data["rewards"].astype(np.float32).reshape(-1, 1)
+    rewards = data["rewards"].astype(np.float32).reshape(-1)
     next_observations = data["next_observations"].astype(np.float32)
-    terminals = data["terminals"].astype(np.float32).reshape(-1, 1)
+    terminals = data["terminals"].astype(np.float32).reshape(-1)
 
     masks = 1.0 - terminals  # 1 for non-terminal transitions
 
-    dataset = D4RLDataset.from_arrays(
+    dataset = Dataset(
         observations=observations,
-        actions=actions,
-        rewards=rewards,
-        masks=masks,
-        dones_float=terminals,
+        actions=actions.astype(np.float32),
+        rewards=rewards.astype(np.float32),
+        masks=masks.astype(np.float32),
+        dones_float=terminals.astype(np.float32),
         next_observations=next_observations,
+        size=len(observations),
     )
 
 
@@ -111,11 +122,52 @@ def main(_):
     env, dataset = make_env_and_dataset(FLAGS.env_name, FLAGS.seed)
 
     kwargs = dict(FLAGS.config)
+    # Use dataset to initialize shapes (env obs is a Dict)
+    init_batch = dataset.sample(1)
+    init_obs = init_batch.observations          # (1, 100, 100, 1)
+    init_act = init_batch.actions               # (1, 3)
+
     agent = Learner(FLAGS.seed,
-                    env.observation_space.sample()[np.newaxis],
-                    env.action_space.sample()[np.newaxis],
+                    init_obs,
+                    init_act,
                     max_steps=FLAGS.max_steps,
                     **kwargs)
+    
+    ###############################################
+    ###############################################
+    # --- sanity check right after dataset creation ---
+    b = dataset.sample(4)
+
+    print("Batch obs:", type(b.observations), b.observations.dtype, b.observations.shape)
+    print("Batch act:", type(b.actions), b.actions.dtype, b.actions.shape)
+    print("Batch rew:", type(b.rewards), b.rewards.dtype, b.rewards.shape)
+    print("Batch next_obs:", type(b.next_observations), b.next_observations.dtype, b.next_observations.shape)
+    print("Batch masks:", type(b.masks), b.masks.dtype, b.masks.shape)
+
+    # hard asserts for your env
+    assert b.observations.shape[-3:] == (100, 100, 1), f"Bad obs shape: {b.observations.shape}"
+    assert b.actions.shape[-1] == 3, f"Bad action shape: {b.actions.shape}"
+
+    # JAX conversion check (optional)
+    import jax.numpy as jnp
+    _ = jnp.asarray(b.observations)
+    _ = jnp.asarray(b.actions)
+    print("JAX conversion OK")
+
+    # THE real test: one update step
+    info = agent.update(b)
+    print("Update OK, info keys:", list(info.keys()))
+    for k, v in info.items():
+        try:
+            print(f"  {k}: {float(v):.6f}")
+        except Exception:
+            print(f"  {k}: {v}")
+
+    # stop here so you don't start long training yet
+    #import sys
+    #sys.exit(0)
+    ###############################################
+    ###############################################
 
     eval_returns = []
     for i in tqdm.tqdm(range(1, FLAGS.max_steps + 1),

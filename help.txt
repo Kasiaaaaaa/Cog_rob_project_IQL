@@ -1,0 +1,9 @@
+chmod +x setup_iql_env.sh
+./setup_iql_env.sh
+
+PYTHON_BIN=python3.9 ./setup_iql_env.sh
+
+if NVIDIA GPU + CUDA working
+USE_GPU=1 ./setup_iql_env.sh
+
+source venv_iql/bin/activate
