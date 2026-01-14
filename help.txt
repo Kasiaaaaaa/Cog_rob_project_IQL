@@ -7,3 +7,30 @@ if NVIDIA GPU + CUDA working
 USE_GPU=1 ./setup_iql_env.sh
 
 source venv_iql/bin/activate
+
+# test
+which python
+which pip
+
+# try agien
+python -m pip install --upgrade pip setuptools wheel
+
+python -m pip install -r requirements.txt \
+  -f https://storage.googleapis.com/jax-releases/jax_releases.html
+
+# cheak
+python - <<'PY'
+import sys, inspect, jax, gym
+print("python:", sys.executable)
+print("jax:", inspect.getfile(jax))
+print("gym:", inspect.getfile(gym))
+PY
+
+# hard reset
+conda deactivate
+conda remove -n iql --all -y
+conda create -n iql python=3.10 -y
+conda activate iql
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r requirements.txt \
+  -f https://storage.googleapis.com/jax-releases/jax_releases.html
