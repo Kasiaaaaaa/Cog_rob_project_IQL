@@ -26,6 +26,15 @@ print("jax:", inspect.getfile(jax))
 print("gym:", inspect.getfile(gym))
 PY
 
+python - <<'PY'
+import scipy
+import scipy.linalg as la
+print("scipy version:", scipy.__version__)
+print("tril exists:", hasattr(la, "tril"))
+print("tril:", la.tril([[1,2],[3,4]]))
+PY
+
+
 # hard reset
 conda deactivate
 conda remove -n iql --all -y
