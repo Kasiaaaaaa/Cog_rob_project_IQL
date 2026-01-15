@@ -83,17 +83,28 @@ class Dataset(object):
             next_observations=next_observations,
             size=len(observations),
         )
-
-
     def sample(self, batch_size: int) -> Batch:
         indx = np.random.randint(self.size, size=batch_size)
-        return Batch(observations=self.observations[indx],
-                     actions=self.actions[indx],
-                     rewards=self.rewards[indx],
-                     masks=self.masks[indx],
-                     next_observations=self.next_observations[indx])
-    
-    
+
+        obs = self.observations[indx]
+        next_obs = self.next_observations[indx]
+
+        if obs.dtype == np.uint8:
+            obs = obs.astype(np.float32) / 255.0
+            next_obs = next_obs.astype(np.float32) / 255.0
+        else:
+            obs = obs.astype(np.float32)
+            next_obs = next_obs.astype(np.float32)
+
+        actions = self.actions[indx].astype(np.float32)
+        if actions.ndim == 3 and actions.shape[1] == 1:
+            actions = actions[:, 0, :]      # (B, 1, A) -> (B, A)
+
+        rewards = self.rewards[indx].astype(np.float32)
+        masks = self.masks[indx].astype(np.float32)
+
+        return Batch(obs, actions, rewards, masks, next_obs)
+
 class NPZDataset(Dataset):
     def __init__(self, npz_path: str, clip_actions: bool = False, eps: float = 1e-5):
         data = np.load(npz_path, allow_pickle=True)
