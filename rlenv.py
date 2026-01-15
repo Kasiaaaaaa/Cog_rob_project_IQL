@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import math
 
 class PegInHoleGymEnv(gym.Env):
-    def __init__(self, shape_type='circle', reward_typ = 'old', render_mode='GUI'):
+    def __init__(self, shape_type='circle', reward_typ = 'old', render_mode='DIRECT'):
         super().__init__()
         self.shape_type = shape_type
         self.reward_typ = reward_typ
@@ -21,7 +21,10 @@ class PegInHoleGymEnv(gym.Env):
         elif self.render_mode == 'DIRECT':
             self.physics_client = p.connect(p.DIRECT)  # Connect to PyBullet in DIRECT mode (no GUI)
         
-        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+                
+        if self.render_mode == "GUI":
+            p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+            
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         p.setGravity(0, 0, -9.81)
 
@@ -49,13 +52,13 @@ class PegInHoleGymEnv(gym.Env):
         self.action_space = spaces.Box(low=-0.005, high=0.005, shape=(3,), dtype=np.float32)
 
         self.reset()
-        
-        p.resetDebugVisualizerCamera(
-            cameraDistance=1.0,    
-            cameraYaw=110,            
-            cameraPitch=-45,         
-            cameraTargetPosition=[0.5, 0, 0.5]  
-        )
+        if self.render_mode == "GUI":
+            p.resetDebugVisualizerCamera(
+                cameraDistance=1.0,
+                cameraYaw=110,
+                cameraPitch=-45,
+                cameraTargetPosition=[0.5, 0, 0.5]
+            )
 
     def _load_env(self):
         # Load the plane and the table into the simulation

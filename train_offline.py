@@ -79,27 +79,34 @@ def make_env_and_dataset(env_name: str,
     if hasattr(env.observation_space, "seed"):
         env.observation_space.seed(seed)
 
+    # -------- dataset loading (memmap .npy) --------
+    # FLAGS.dataset_path should be the directory containing the .npy files
+    # e.g. --dataset_path ./iql_dataset_npy
 
-    # data set loding
-    data = np.load(FLAGS.dataset_path)
+    ds_dir = FLAGS.dataset_path
 
-    observations = data["observations"].astype(np.float32)
-    actions = data["actions"].astype(np.float32)
-    rewards = data["rewards"].astype(np.float32).reshape(-1)
-    next_observations = data["next_observations"].astype(np.float32)
-    terminals = data["terminals"].astype(np.float32).reshape(-1)
+    observations = np.load(os.path.join(ds_dir, "observations.npy"), mmap_mode="r")
+    actions = np.load(os.path.join(ds_dir, "actions.npy"), mmap_mode="r")
+    rewards = np.load(os.path.join(ds_dir, "rewards.npy"), mmap_mode="r")
+    next_observations = np.load(os.path.join(ds_dir, "next_observations.npy"), mmap_mode="r")
+    terminals = np.load(os.path.join(ds_dir, "terminals.npy"), mmap_mode="r")
 
-    masks = 1.0 - terminals  # 1 for non-terminal transitions
+    # terminals is float32 {0,1} already in the converter
+    masks = 1.0 - terminals
 
+    # IMPORTANT: do NOT astype() the full arrays here (that copies into RAM)
     dataset = Dataset(
         observations=observations,
-        actions=actions.astype(np.float32),
-        rewards=rewards.astype(np.float32),
-        masks=masks.astype(np.float32),
-        dones_float=terminals.astype(np.float32),
+        actions=actions,
+        rewards=rewards,
+        masks=masks,
+        dones_float=terminals,
         next_observations=next_observations,
         size=len(observations),
     )
+
+    print("Dataset obs dtype/shape:", dataset.observations.dtype, dataset.observations.shape)
+    print("Dataset actions min/max:", dataset.actions[:1000].min(), dataset.actions[:1000].max())
 
 
     # if 'antmaze' in FLAGS.env_name:
@@ -164,8 +171,8 @@ def main(_):
             print(f"  {k}: {v}")
 
     # stop here so you don't start long training yet
-    #import sys
-    #sys.exit(0)
+    # import sys
+    # sys.exit(0)
     ###############################################
     ###############################################
 
